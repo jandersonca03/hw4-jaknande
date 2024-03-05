@@ -167,12 +167,43 @@ exitError (Error msg) = return (VErr msg)
 --------------------------------------------------------------------------------
 eval :: Env -> Expr -> Value
 --------------------------------------------------------------------------------
-eval = error "TBD:eval"
+eval _ (EInt i) = value i
+eval _ (EBool b) = value b
+eval _ ENil = VNil
+eval env (EVar id) = lookupId id env2
+  where
+    head (VPair x _) = x
+    head p = throw (Error ("(" ++ valueString p ++ ") is not a pair"))
+    tail (VPair _ y) = y
+    tail p = throw (Error ("(" ++ valueString p ++ ") is not a pair"))
+    env2 = env ++ [("head", VPrim head), ("tail", VPrim tail)]
+eval env (EBin op lhs rhs) = evalOp op (eval env lhs) (eval env rhs)
+eval env (EIf cond t f) = eval env (if b then t else f) where VBool b = eval env cond
+eval env (ELet id e1 e2) = eval ((id, eval env e1) : env) e2
+eval env (EApp f x) =
+  case eval env f of
+    (VClos env2 id e2) -> eval ([(id, xv)] ++ env2 ++ env) e2
+    (VPrim p) -> p xv
+    _ -> throw (Error ("(" ++ exprString f ++ ") is not a lambda"))
+  where
+    xv = eval env x
+eval env (ELam id expr) = VClos env id expr
 
 --------------------------------------------------------------------------------
 evalOp :: Binop -> Value -> Value -> Value
 --------------------------------------------------------------------------------
-evalOp = error "TBD:evalOp"
+evalOp Plus (VInt x) (VInt y) = value (x + y)
+evalOp Minus (VInt x) (VInt y) = value (x - y)
+evalOp Mul (VInt x) (VInt y) = value (x * y)
+evalOp Div (VInt x) (VInt y) = value (x `div` y)
+evalOp Eq x y = value (x == y)
+evalOp Ne x y = value (x /= y)
+evalOp Lt (VInt x) (VInt y) = value (x < y)
+evalOp Le (VInt x) (VInt y) = value (x <= y)
+evalOp And (VBool x) (VBool y) = value (x && y)
+evalOp Or (VBool x) (VBool y) = value (x || y)
+evalOp Cons x y = VPair x y
+evalOp op lhs rhs = throw (Error ("type error: (" ++ valueString lhs ++ ") " ++ binopString op ++ " (" ++ valueString rhs ++ ")"))
 
 --------------------------------------------------------------------------------
 -- | `lookupId x env` returns the most recent
@@ -191,7 +222,11 @@ evalOp = error "TBD:evalOp"
 --------------------------------------------------------------------------------
 lookupId :: Id -> Env -> Value
 --------------------------------------------------------------------------------
-lookupId = error "TBD:lookupId"
+-- lookupId = error "TBD:lookupId"
+lookupId x [] = throw (Error ("unbound variable: " ++ x))
+lookupId x ((id, value) : env)
+  | x == id = value
+  | otherwise = lookupId x env
 
 prelude :: Env
 prelude =
